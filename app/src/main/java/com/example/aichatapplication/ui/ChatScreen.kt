@@ -628,7 +628,7 @@ fun MessageItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
         Card(
@@ -636,7 +636,9 @@ fun MessageItem(
             colors = CardDefaults.cardColors(
                 containerColor = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = if (isUser) 2.dp else 1.dp
+            ),
             modifier = Modifier
                 .fillMaxWidth(if (isUser) 0.92f else 1f)
                 .combinedClickable(
@@ -805,6 +807,7 @@ fun ToolCardItem(card: com.example.aichatapplication.model.ToolCard) {
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.padding(vertical = 4.dp)
     ) {
         Column {
