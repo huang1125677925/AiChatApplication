@@ -2,7 +2,6 @@ package com.example.aichatapplication.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -90,6 +88,10 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.draw.drawWithContent
@@ -622,77 +624,61 @@ fun MessageItem(
     val coroutineScope = rememberCoroutineScope()
     val graphicsLayer = rememberGraphicsLayer()
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        if (!isUser) {
-            Box(
-                modifier = Modifier
-                    .padding(end = 8.dp)
-                    .width(32.dp)
-                    .height(32.dp)
-                    .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = "AI", color = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
-        }
-
-        Column(
-            modifier = Modifier.weight(1f, fill = false),
-            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            modifier = Modifier
+                .fillMaxWidth(if (isUser) 0.92f else 1f)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        if (message.content.isNotEmpty()) {
+                            clipboardManager.setText(AnnotatedString(message.content))
+                            android.widget.Toast
+                                .makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    }
+                )
+                .drawWithContent {
+                    graphicsLayer.record {
+                        this@drawWithContent.drawContent()
+                    }
+                    drawLayer(graphicsLayer)
+                }
         ) {
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier
-                    .combinedClickable(
-                        onClick = {},
-                        onLongClick = {
-                            if (message.content.isNotEmpty()) {
-                                clipboardManager.setText(AnnotatedString(message.content))
-                                android.widget.Toast
-                                    .makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT)
-                                    .show()
-                            }
-                        }
+            Column(modifier = Modifier.padding(12.dp)) {
+                if (isUser) {
+                    Text(
+                        text = message.content,
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
-                    .drawWithContent {
-                        graphicsLayer.record {
-                            this@drawWithContent.drawContent()
-                        }
-                        drawLayer(graphicsLayer)
-                    }
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    if (isUser) {
-                        Text(
-                            text = message.content,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
+                } else {
+                    if (message.isLoading) {
+                        // 加载阶段：显示状态提示文字 + 动态省略号
+                        StreamingStatusText(statusText = message.content)
                     } else {
-                        if (message.isLoading) {
-                            // 加载阶段：显示状态提示文字 + 动态省略号
-                            StreamingStatusText(statusText = message.content)
-                        } else {
+                        if (message.isStreaming) {
                             SelectionContainer {
-                                if (message.isStreaming) {
-                                    Text(
-                                        text = message.content,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                } else {
-                                    AssistantMarkdown(content = message.content)
-                                }
+                                Text(
+                                    text = message.content,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
+                        } else {
+                            AssistantMarkdown(content = message.content)
                         }
                     }
+                }
 
                     // 渲染工具执行卡片
                     if (message.toolCards.isNotEmpty()) {
@@ -771,20 +757,6 @@ fun MessageItem(
                         }
                     }
                 }
-            }
-        }
-
-        if (isUser) {
-            // User 头像占位
-            Box(
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .width(32.dp)
-                    .height(32.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = "U", color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
         }
     }
@@ -916,7 +888,9 @@ private fun AssistantMarkdown(content: String) {
             when (segment) {
                 is MarkdownTextSegment -> {
                     if (segment.text.isNotBlank()) {
-                        Markdown(content = shrinkMarkdownHeadings(segment.text))
+                        SelectionContainer {
+                            Markdown(content = shrinkMarkdownHeadings(segment.text))
+                        }
                     }
                 }
                 is MarkdownTableSegment -> MarkdownTable(table = segment)
@@ -927,49 +901,75 @@ private fun AssistantMarkdown(content: String) {
 
 @Composable
 private fun MarkdownTable(table: MarkdownTableSegment) {
-    val scrollState = rememberScrollState()
-    Box(modifier = Modifier.horizontalScroll(scrollState)) {
-        Column(
-            modifier = Modifier.border(
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.outlineVariant,
                 shape = RoundedCornerShape(8.dp)
             )
-        ) {
+    ) {
+        MarkdownTableRow(
+            cells = table.header,
+            isHeader = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        table.rows.forEach { row ->
             MarkdownTableRow(
-                cells = table.header,
-                isHeader = true
+                cells = row,
+                isHeader = false,
+                modifier = Modifier.fillMaxWidth()
             )
-            table.rows.forEach { row ->
-                MarkdownTableRow(
-                    cells = row,
-                    isHeader = false
+        }
+    }
+}
+
+@Composable
+private fun MarkdownTableRow(
+    cells: List<String>,
+    isHeader: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier = modifier) {
+        cells.forEach { cell ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                    .background(
+                        if (isHeader) MaterialTheme.colorScheme.secondaryContainer
+                        else MaterialTheme.colorScheme.surface
+                    )
+                    .padding(horizontal = 6.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = parseInlineBoldMarkdown(cell.ifBlank { " " }),
+                    style = if (isHeader) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
+                    color = if (isHeader) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+                    softWrap = true
                 )
             }
         }
     }
 }
 
-@Composable
-private fun MarkdownTableRow(cells: List<String>, isHeader: Boolean) {
-    Row {
-        cells.forEach { cell ->
-            Box(
-                modifier = Modifier
-                    .widthIn(min = 120.dp)
-                    .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                    .background(
-                        if (isHeader) MaterialTheme.colorScheme.secondaryContainer
-                        else MaterialTheme.colorScheme.surface
-                    )
-                    .padding(horizontal = 10.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = cell.ifBlank { " " },
-                    style = if (isHeader) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium,
-                    color = if (isHeader) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
-                )
+/** Renders `**bold**` segments inside markdown table cells (plain Text does not parse markdown). */
+private fun parseInlineBoldMarkdown(text: String): AnnotatedString {
+    val regex = Regex("\\*\\*(.+?)\\*\\*")
+    return buildAnnotatedString {
+        var cursor = 0
+        regex.findAll(text).forEach { match ->
+            if (match.range.first > cursor) {
+                append(text.substring(cursor, match.range.first))
             }
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                append(match.groupValues[1])
+            }
+            cursor = match.range.last + 1
+        }
+        if (cursor < text.length) {
+            append(text.substring(cursor))
         }
     }
 }
