@@ -14,12 +14,13 @@ import java.io.OutputStream
 
 object ImageUtils {
     /**
-     * Very tall/wide message captures can exceed [Canvas.getMaximumBitmapWidth] / Height on some
-     * devices, which breaks encoding or truncates output. Scale down uniformly when needed.
+     * Very tall/wide message captures can exceed the device canvas maximum bitmap
+     * dimensions, which breaks encoding or truncates output. Scale down uniformly when needed.
      */
     fun scaleDownIfExceedsCanvasLimits(bitmap: Bitmap): Bitmap {
-        val maxW = Canvas.getMaximumBitmapWidth().coerceAtLeast(1)
-        val maxH = Canvas.getMaximumBitmapHeight().coerceAtLeast(1)
+        val limitsCanvas = Canvas()
+        val maxW = limitsCanvas.getMaximumBitmapWidth().coerceAtLeast(1)
+        val maxH = limitsCanvas.getMaximumBitmapHeight().coerceAtLeast(1)
         if (bitmap.width <= maxW && bitmap.height <= maxH) return bitmap
         val scale = minOf(maxW.toFloat() / bitmap.width, maxH.toFloat() / bitmap.height)
         val newW = (bitmap.width * scale).toInt().coerceIn(1, maxW)
