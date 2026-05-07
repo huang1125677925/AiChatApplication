@@ -145,7 +145,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     if (stableRounds >= 2) return@launch
                 } else {
                     stableRounds = 0
-                    _messages.value = history.map { it.toUiMessage() }
+                    if (_currentConversationId.value != conversationId) return@launch
+                    val remote = history.map { it.toUiMessage() }
+                    _messages.value = mergeRemoteHistoryWithLocal(remote, _messages.value)
                 }
                 lastContentSnapshot = snapshot
             }
@@ -452,7 +454,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     conversationId = conversationId
                 )
             }.onSuccess { history ->
-                _messages.value = history.map { it.toUiMessage() }
+                if (_currentConversationId.value != conversationId) return@onSuccess
+                val remote = history.map { it.toUiMessage() }
+                _messages.value = mergeRemoteHistoryWithLocal(remote, _messages.value)
             }.onFailure {
                 _message.value = it.message ?: "加载消息失败"
             }
@@ -464,6 +468,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val token = sessionManager.getToken()
         if (token.isNullOrBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
+            val localSnapshot = _messages.value.toList()
             runCatching {
                 networkClient.listConversations(token = token)
             }.onSuccess { conversations ->
@@ -472,9 +477,47 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 networkClient.listMessages(token = token, conversationId = conversationId)
             }.onSuccess { history ->
-                _messages.value = history.map { it.toUiMessage() }
+                if (_currentConversationId.value != conversationId) return@onSuccess
+                val remote = history.map { it.toUiMessage() }
+                _messages.value = mergeRemoteHistoryWithLocal(remote, localSnapshot)
             }
         }
+    }
+
+    /**
+     * 将服务端拉取的消息列表与本地快照合并。
+     * 流式结束后立刻 [listMessages] 时，服务端有时尚未写入助手消息，接口会停在最后一条用户消息，
+     * 若直接替换列表会导致刚显示完的回复从界面消失。此时保留本地已完成的助手气泡。
+     */
+    private fun mergeRemoteHistoryWithLocal(
+        remote: List<UiMessage>,
+        localSnapshot: List<UiMessage>
+    ): List<UiMessage> {
+        if (remote.isEmpty() || localSnapshot.isEmpty()) return remote
+
+        val lastRemote = remote.last()
+        val lastLocal = localSnapshot.last()
+
+        if (lastRemote.role == Role.ASSISTANT || lastRemote.role == Role.TOOL) return remote
+        if (lastLocal.role != Role.ASSISTANT) return remote
+        if (lastLocal.isLoading || lastLocal.isStreaming) return remote
+        if (!hasPersistableAssistantPayload(lastLocal)) return remote
+
+        if (lastRemote.role == Role.USER) {
+            val userAboveAssistant = localSnapshot.getOrNull(localSnapshot.size - 2)
+            if (userAboveAssistant?.role == Role.USER &&
+                userAboveAssistant.content.trim() == lastRemote.content.trim()
+            ) {
+                return remote + lastLocal
+            }
+        }
+        return remote
+    }
+
+    private fun hasPersistableAssistantPayload(msg: UiMessage): Boolean {
+        val t = msg.content.trim()
+        if (t.isNotEmpty() && t != "思考中..." && t != "重新思考中...") return true
+        return msg.toolCards.isNotEmpty()
     }
 
     private fun ensureConversationForSend(token: String): Long? {
