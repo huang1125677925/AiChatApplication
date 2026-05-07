@@ -756,7 +756,6 @@ fun MessageItem(
                             }
                         }
                     }
-                }
             }
         }
     }
