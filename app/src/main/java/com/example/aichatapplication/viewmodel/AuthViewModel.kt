@@ -77,19 +77,25 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         phone: String,
         invitationCode: String
     ) {
+        val trimmedInvite = invitationCode.trim()
         if (username.isBlank() || password.isBlank() || email.isBlank()) {
             _uiState.update { it.copy(message = "用户名、密码和邮箱不能为空") }
             return
         }
+        if (trimmedInvite.isBlank()) {
+            _uiState.update { it.copy(message = "邀请码不能为空") }
+            return
+        }
         request(
             call = {
+                userNetworkClient.validateInvitation(trimmedInvite)
                 userNetworkClient.register(
                     RegisterRequest(
                         username = username,
                         password = password,
                         email = email,
                         phone = phone.ifBlank { null },
-                        invitationCode = invitationCode.ifBlank { null }
+                        invitationCode = trimmedInvite
                     )
                 )
             },

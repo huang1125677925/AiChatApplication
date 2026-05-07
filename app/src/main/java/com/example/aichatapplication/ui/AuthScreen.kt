@@ -151,7 +151,8 @@ private fun RegisterForm(
     OutlinedTextField(
         value = invitationCode,
         onValueChange = { invitationCode = it },
-        label = { Text("邀请码（可选）") },
+        label = { Text("邀请码") },
+        supportingText = { Text("必填，提交前会校验是否有效") },
         modifier = Modifier.fillMaxWidth()
     )
     SubmitButton(
