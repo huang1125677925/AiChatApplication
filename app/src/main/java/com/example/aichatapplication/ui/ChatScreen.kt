@@ -78,6 +78,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.alpha
@@ -900,9 +901,19 @@ private fun AssistantMarkdown(content: String) {
 
 @Composable
 private fun MarkdownTable(table: MarkdownTableSegment) {
+    val scrollState = rememberScrollState()
+    val columnWidths = remember(table) {
+        val colCount = table.header.size
+        val rows = listOf(table.header) + table.rows
+        List(colCount) { colIndex ->
+            val maxLen = rows.maxOf { row -> row.getOrElse(colIndex) { "" }.length }
+            (maxLen * 10 + 28).dp.coerceIn(64.dp, 240.dp)
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(scrollState)
             .border(
                 width = 1.dp,
                 color = MaterialTheme.colorScheme.outlineVariant,
@@ -911,14 +922,14 @@ private fun MarkdownTable(table: MarkdownTableSegment) {
     ) {
         MarkdownTableRow(
             cells = table.header,
+            columnWidths = columnWidths,
             isHeader = true,
-            modifier = Modifier.fillMaxWidth()
         )
         table.rows.forEach { row ->
             MarkdownTableRow(
                 cells = row,
+                columnWidths = columnWidths,
                 isHeader = false,
-                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -927,14 +938,16 @@ private fun MarkdownTable(table: MarkdownTableSegment) {
 @Composable
 private fun MarkdownTableRow(
     cells: List<String>,
+    columnWidths: List<Dp>,
     isHeader: Boolean,
     modifier: Modifier = Modifier
 ) {
     Row(modifier = modifier) {
-        cells.forEach { cell ->
+        cells.forEachIndexed { index, cell ->
+            val w = columnWidths.getOrElse(index) { 72.dp }
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .width(w)
                     .border(width = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                     .background(
                         if (isHeader) MaterialTheme.colorScheme.secondaryContainer
@@ -946,7 +959,8 @@ private fun MarkdownTableRow(
                     text = parseInlineBoldMarkdown(cell.ifBlank { " " }),
                     style = if (isHeader) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                     color = if (isHeader) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
-                    softWrap = true
+                    softWrap = true,
+                    maxLines = 24,
                 )
             }
         }
@@ -1004,7 +1018,11 @@ private fun parseMarkdownSegments(content: String): List<MarkdownSegment> {
             val header = parseTableRow(lines[index])
             var rowIndex = index + 2
             val bodyRows = mutableListOf<List<String>>()
-            while (rowIndex < lines.size && isTableRow(lines[rowIndex])) {
+            while (
+                rowIndex < lines.size &&
+                isTableRow(lines[rowIndex]) &&
+                !isTableSeparator(lines[rowIndex])
+            ) {
                 bodyRows.add(parseTableRow(lines[rowIndex]))
                 rowIndex++
             }
@@ -1043,9 +1061,17 @@ private fun isTableRow(line: String): Boolean {
     return parseTableRow(trimmed).size >= 2
 }
 
+private fun normalizeMarkdownTableDashes(line: String): String =
+    line.trim()
+        .replace('\u2013', '-')
+        .replace('\u2014', '-')
+        .replace('\u2212', '-')
+        .replace('\uFE58', '-')
+
 private fun isTableSeparator(line: String): Boolean {
-    val separatorRegex = Regex("^\\s*\\|?(\\s*:?-{3,}:?\\s*\\|)+\\s*:?-{3,}:?\\s*\\|?\\s*$")
-    return separatorRegex.matches(line)
+    val normalized = normalizeMarkdownTableDashes(line)
+    val separatorRegex = Regex("^\\s*\\|?(\\s*:?-{2,}:?\\s*\\|)+\\s*:?-{2,}:?\\s*\\|?\\s*$")
+    return separatorRegex.matches(normalized)
 }
 
 private fun parseTableRow(line: String): List<String> {
