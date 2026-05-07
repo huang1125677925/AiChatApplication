@@ -3,6 +3,7 @@ package com.example.aichatapplication.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -78,7 +79,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.alpha
@@ -899,38 +899,57 @@ private fun AssistantMarkdown(content: String) {
     }
 }
 
+/**
+ * Distributes [maxWidth] across columns by content weight so the full table fits without
+ * horizontal scrolling. That way "导出图片" captures all columns (scroll was clipping draws).
+ */
+private fun markdownTableColumnWidths(maxWidth: Dp, weights: List<Int>): List<Dp> {
+    if (weights.isEmpty()) return emptyList()
+    val totalWeight = weights.sum().toFloat().coerceAtLeast(1f)
+    val minCol = 36.dp
+    var widths = weights.map { w -> maxWidth * (w / totalWeight) }.map { it.coerceAtLeast(minCol) }
+    var sum = widths.fold(0.dp) { acc, w -> acc + w }
+    if (sum > maxWidth) {
+        val scale = maxWidth / sum
+        widths = widths.map { it * scale }
+    }
+    return widths
+}
+
 @Composable
 private fun MarkdownTable(table: MarkdownTableSegment) {
-    val scrollState = rememberScrollState()
-    val columnWidths = remember(table) {
-        val colCount = table.header.size
-        val rows = listOf(table.header) + table.rows
+    val colCount = table.header.size
+    val rows = listOf(table.header) + table.rows
+    val weights = remember(table) {
         List(colCount) { colIndex ->
-            val maxLen = rows.maxOf { row -> row.getOrElse(colIndex) { "" }.length }
-            (maxLen * 10 + 28).dp.coerceIn(64.dp, 240.dp)
+            rows.maxOf { row -> row.getOrElse(colIndex) { "" }.length }.coerceAtLeast(1)
         }
     }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(scrollState)
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(8.dp)
-            )
-    ) {
-        MarkdownTableRow(
-            cells = table.header,
-            columnWidths = columnWidths,
-            isHeader = true,
-        )
-        table.rows.forEach { row ->
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val columnWidths = remember(weights, maxWidth) {
+            markdownTableColumnWidths(maxWidth, weights)
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    shape = RoundedCornerShape(8.dp)
+                )
+        ) {
             MarkdownTableRow(
-                cells = row,
+                cells = table.header,
                 columnWidths = columnWidths,
-                isHeader = false,
+                isHeader = true,
             )
+            table.rows.forEach { row ->
+                MarkdownTableRow(
+                    cells = row,
+                    columnWidths = columnWidths,
+                    isHeader = false,
+                )
+            }
         }
     }
 }
@@ -960,7 +979,6 @@ private fun MarkdownTableRow(
                     style = if (isHeader) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                     color = if (isHeader) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
                     softWrap = true,
-                    maxLines = 24,
                 )
             }
         }

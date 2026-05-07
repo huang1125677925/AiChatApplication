@@ -3,6 +3,7 @@ package com.example.aichatapplication.utils
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -12,12 +13,30 @@ import kotlinx.coroutines.withContext
 import java.io.OutputStream
 
 object ImageUtils {
+    /**
+     * Very tall/wide message captures can exceed [Canvas.getMaximumBitmapWidth] / Height on some
+     * devices, which breaks encoding or truncates output. Scale down uniformly when needed.
+     */
+    fun scaleDownIfExceedsCanvasLimits(bitmap: Bitmap): Bitmap {
+        val maxW = Canvas.getMaximumBitmapWidth().coerceAtLeast(1)
+        val maxH = Canvas.getMaximumBitmapHeight().coerceAtLeast(1)
+        if (bitmap.width <= maxW && bitmap.height <= maxH) return bitmap
+        val scale = minOf(maxW.toFloat() / bitmap.width, maxH.toFloat() / bitmap.height)
+        val newW = (bitmap.width * scale).toInt().coerceIn(1, maxW)
+        val newH = (bitmap.height * scale).toInt().coerceIn(1, maxH)
+        return Bitmap.createScaledBitmap(bitmap, newW, newH, true)
+    }
+
     suspend fun saveBitmapToGallery(context: Context, bitmap: Bitmap) {
         withContext(Dispatchers.IO) {
             val filename = "ToolResult_${System.currentTimeMillis()}.png"
             var fos: OutputStream? = null
             var imageUri: android.net.Uri? = null
-            
+            val toSave = scaleDownIfExceedsCanvasLimits(bitmap)
+            if (toSave !== bitmap) {
+                bitmap.recycle()
+            }
+
             try {
                 val resolver = context.contentResolver
                 val contentValues = ContentValues().apply {
@@ -34,7 +53,7 @@ object ImageUtils {
                 imageUri?.let { uri ->
                     fos = resolver.openOutputStream(uri)
                     fos?.use {
-                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
+                        toSave.compress(Bitmap.CompressFormat.PNG, 100, it)
                     }
                     
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
