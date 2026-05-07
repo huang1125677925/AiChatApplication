@@ -1,0 +1,17 @@
+# Gradle
+.gradle/
+**/build/
+
+# Local SDK / signing (never commit)
+local.properties
+*.jks
+*.keystore
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Junk / accidental downloads
+.downloads/
+下载*
